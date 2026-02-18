@@ -22,7 +22,10 @@ COPY requirements.txt ./
 # Install dependencies with verbose output
 RUN echo "📦 Installing Python dependencies..." && \
     pip install --user --no-cache-dir -r requirements.txt || \
-    (echo "❌ Some packages failed, but continuing..." && true)
+    echo "⚠️ Some packages failed, but continuing..."
+
+# Ensure the .local directory exists (even if no packages installed)
+RUN mkdir -p /root/.local
 
 # Create a flag file to indicate completion
 RUN touch /root/.deps_installed
