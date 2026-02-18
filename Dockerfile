@@ -154,7 +154,7 @@ RUN if [ -f requirements.txt ]; then \
 # Install Node dependencies if package.json exists
 RUN if [ -f package.json ]; then \
         echo "📦 Installing Node dependencies..." && \
-        npm ci --only=production; \
+        npm install --only=production --no-package-lock; \
     else \
         echo "📝 No package.json found, skipping Node dependencies"; \
     fi
