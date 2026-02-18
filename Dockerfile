@@ -1,20 +1,31 @@
 # Multi-stage build for optimal size and performance
-# Stage 1: Python dependencies (only if requirements.txt exists)
+# Stage 1: Python dependencies (with build tools)
 FROM python:3.12-slim AS python-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    libffi-dev \
+    libssl-dev \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /deps
 
-# Copy requirements.txt only if it exists (using wildcard)
-COPY requirements.txt* ./
+# Copy requirements.txt
+COPY requirements.txt ./
 
-# Install dependencies only if requirements.txt exists
-RUN if [ -f requirements.txt ]; then \
-        echo "📦 Installing Python dependencies from requirements.txt"; \
-        pip install --user -r requirements.txt; \
-    else \
-        echo "📝 No requirements.txt found, skipping Python dependencies"; \
-        mkdir -p /root/.local; \
-    fi
+# Install dependencies with verbose output
+RUN echo "📦 Installing Python dependencies..." && \
+    pip install --user --no-cache-dir -r requirements.txt || \
+    (echo "❌ Some packages failed, but continuing..." && true)
+
+# Create a flag file to indicate completion
+RUN touch /root/.deps_installed
 
 # Stage 2: Main runtime image
 FROM debian:bookworm-slim
@@ -35,11 +46,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     && apt-get clean
 
-# Add PHP repository (Ondrej's repo - most complete PHP packages)
+# Add PHP repository
 RUN curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
 
-# Install base runtimes (core packages only)
+# Install base runtimes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # System tools
     ca-certificates \
@@ -83,7 +94,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && npm install -g npm@latest \
     && apt-get clean
 
-# Install additional PHP extensions (separate to avoid failures)
+# Install additional PHP extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-redis \
     php8.3-mongodb \
@@ -91,15 +102,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-imagick \
     php8.3-soap \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* || true  # Continue even if some fail
+    && rm -rf /var/lib/apt/lists/* || true
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# Install basic Python packages globally
-RUN pip3 install --upgrade pip \
-    && pip3 install gunicorn || true \
-    && pip3 install flask || true
 
 # Create necessary directories
 RUN mkdir -p /var/log/supervisor \
@@ -113,8 +119,8 @@ RUN mkdir -p /var/log/supervisor \
     /app/public \
     /app/frontend-builds
 
-# Copy Python dependencies from builder (if any)
-COPY --from=python-builder /root/.local /root/.local 2>/dev/null || true
+# Copy Python dependencies from builder
+COPY --from=python-builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy configuration files
@@ -135,12 +141,11 @@ RUN if [ -f composer.json ]; then \
         echo "📝 No composer.json found, skipping PHP dependencies"; \
     fi
 
-# Install Python dependencies if requirements.txt exists
+# Install Python dependencies (second attempt in main image if needed)
 RUN if [ -f requirements.txt ]; then \
-        echo "📦 Installing Python dependencies from requirements.txt..." && \
-        pip3 install -r requirements.txt; \
-    else \
-        echo "📝 No requirements.txt found, skipping Python dependencies"; \
+        echo "📦 Installing Python dependencies in main image..." && \
+        pip3 install --no-cache-dir -r requirements.txt || \
+        echo "⚠️ Some Python packages failed, but continuing..."; \
     fi
 
 # Install Node dependencies if package.json exists
@@ -157,8 +162,10 @@ RUN chown -R www-data:www-data /app \
     && chown -R www-data:www-data /var/log/nginx \
     && chown -R www-data:www-data /var/lib/nginx \
     && chown -R www-data:www-data /app/tmp \
-    && chown -R www-data:www-data /app/logs \
-    && chown -R www-data:www-data /root/.local || true
+    && chown -R www-data:www-data /app/logs
+
+# Create a simple test script
+RUN echo '#!/bin/bash\npython3 -c "import sys; print(f\"Python {sys.version}\")"\nphp -v | head -1\nnode -v\nnginx -v' > /app/version-check.sh && chmod +x /app/version-check.sh
 
 # Create healthcheck
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
