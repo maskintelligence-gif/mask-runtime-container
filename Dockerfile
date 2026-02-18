@@ -1,23 +1,23 @@
 # Multi-stage build for optimal size and performance
 # Stage 1: Builder for React/Node assets
-FROM node:20-slim AS node-builder
+# FROM node:20-slim AS node-builder
 
-WORKDIR /build
+# WORKDIR /build
 
 # Copy package files first (better caching)
-COPY frontend/package*.json ./frontend/
-RUN if [ -f frontend/package.json ]; then \
-        cd frontend && npm ci --only=production; \
-    fi
+# COPY frontend/package*.json ./frontend/
+# RUN if [ -f frontend/package.json ]; then \
+  #      cd frontend && npm ci --only=production; \
+   # fi
 
 # Copy and build frontend if exists
-COPY frontend/ ./frontend/
-RUN if [ -d frontend ] && [ -f frontend/package.json ]; then \
-        cd frontend && npm run build && \
-        mkdir -p /app/public && \
-        cp -r dist/* /app/public/ 2>/dev/null || \
-        cp -r build/* /app/public/ 2>/dev/null || true; \
-    fi
+# COPY frontend/ ./frontend/
+# RUN if [ -d frontend ] && [ -f frontend/package.json ]; then \
+       # cd frontend && npm run build && \
+       # mkdir -p /app/public && \
+       # cp -r dist/* /app/public/ 2>/dev/null || \
+      #  cp -r build/* /app/public/ 2>/dev/null || true; \
+    # fi
 
 # Stage 2: Python dependencies
 FROM python:3.12-slim AS python-builder
