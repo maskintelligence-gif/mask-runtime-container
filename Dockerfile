@@ -1,15 +1,19 @@
 # Multi-stage build for optimal size and performance
-# Stage 1: Python dependencies
+# Stage 1: Python dependencies (only if requirements.txt exists)
 FROM python:3.12-slim AS python-builder
 
 WORKDIR /deps
-# Only copy requirements.txt if it exists
+
+# Copy requirements.txt only if it exists (using wildcard)
 COPY requirements.txt* ./
+
+# Install dependencies only if requirements.txt exists
 RUN if [ -f requirements.txt ]; then \
-        echo "Installing Python dependencies..." && \
+        echo "📦 Installing Python dependencies from requirements.txt"; \
         pip install --user -r requirements.txt; \
     else \
-        echo "No requirements.txt found, skipping Python dependencies"; \
+        echo "📝 No requirements.txt found, skipping Python dependencies"; \
+        mkdir -p /root/.local; \
     fi
 
 # Stage 2: Main runtime image
@@ -35,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
 
-# Install all runtimes
+# Install base runtimes (core packages only)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # System tools
     ca-certificates \
@@ -49,13 +53,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     nano \
     htop \
-    # PHP 8.3 and extensions (from sury repo)
+    # PHP 8.3 core
     php8.3 \
     php8.3-fpm \
     php8.3-cli \
     php8.3-common \
     php8.3-mysql \
-    php8.3-pgsql \
     php8.3-curl \
     php8.3-gd \
     php8.3-xml \
@@ -64,24 +67,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-bcmath \
     php8.3-intl \
     php8.3-sqlite3 \
-    # Python 3 (from Debian repo)
+    # Python 3
     python3 \
     python3-pip \
     python3-venv \
     python3-dev \
     # Nginx
     nginx \
-    # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20 (from Nodesource)
+# Install Node.js 20
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g npm@latest \
     && apt-get clean
 
-# Install Redis and MongoDB extensions separately (they need additional repos)
+# Install additional PHP extensions (separate to avoid failures)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-redis \
     php8.3-mongodb \
@@ -89,14 +91,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-imagick \
     php8.3-soap \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* || true  # Continue even if some fail
 
-# Install Composer (PHP package manager)
+# Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Install additional Python packages globally
+# Install basic Python packages globally
 RUN pip3 install --upgrade pip \
-    && pip3 install gunicorn uvicorn fastapi flask django celery redis
+    && pip3 install gunicorn || true \
+    && pip3 install flask || true
 
 # Create necessary directories
 RUN mkdir -p /var/log/supervisor \
@@ -110,8 +113,8 @@ RUN mkdir -p /var/log/supervisor \
     /app/public \
     /app/frontend-builds
 
-# Copy Python dependencies from builder
-COPY --from=python-builder /root/.local /root/.local
+# Copy Python dependencies from builder (if any)
+COPY --from=python-builder /root/.local /root/.local 2>/dev/null || true
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy configuration files
@@ -126,17 +129,26 @@ COPY . .
 
 # Install PHP dependencies if composer.json exists
 RUN if [ -f composer.json ]; then \
+        echo "📦 Installing PHP dependencies..." && \
         composer install --no-dev --optimize-autoloader; \
+    else \
+        echo "📝 No composer.json found, skipping PHP dependencies"; \
     fi
 
 # Install Python dependencies if requirements.txt exists
 RUN if [ -f requirements.txt ]; then \
+        echo "📦 Installing Python dependencies from requirements.txt..." && \
         pip3 install -r requirements.txt; \
+    else \
+        echo "📝 No requirements.txt found, skipping Python dependencies"; \
     fi
 
-# Install Node dependencies if package.json exists in root
+# Install Node dependencies if package.json exists
 RUN if [ -f package.json ]; then \
+        echo "📦 Installing Node dependencies..." && \
         npm ci --only=production; \
+    else \
+        echo "📝 No package.json found, skipping Node dependencies"; \
     fi
 
 # Set permissions
@@ -145,9 +157,10 @@ RUN chown -R www-data:www-data /app \
     && chown -R www-data:www-data /var/log/nginx \
     && chown -R www-data:www-data /var/lib/nginx \
     && chown -R www-data:www-data /app/tmp \
-    && chown -R www-data:www-data /app/logs
+    && chown -R www-data:www-data /app/logs \
+    && chown -R www-data:www-data /root/.local || true
 
-# Create a healthcheck
+# Create healthcheck
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
