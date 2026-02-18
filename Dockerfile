@@ -3,9 +3,13 @@
 FROM python:3.12-slim AS python-builder
 
 WORKDIR /deps
-COPY requirements.txt .
+# Only copy requirements.txt if it exists
+COPY requirements.txt* ./
 RUN if [ -f requirements.txt ]; then \
+        echo "Installing Python dependencies..." && \
         pip install --user -r requirements.txt; \
+    else \
+        echo "No requirements.txt found, skipping Python dependencies"; \
     fi
 
 # Stage 2: Main runtime image
