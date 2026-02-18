@@ -8,27 +8,7 @@ RUN if [ -f requirements.txt ]; then \
         pip install --user -r requirements.txt; \
     fi
 
-# Stage 2: React builder (COMMENTED OUT - Uncomment when you have React app)
-# FROM node:20-slim AS react-builder
-# 
-# WORKDIR /build
-# 
-# # Copy package files first (better caching)
-# COPY frontend/package*.json ./frontend/
-# RUN if [ -f frontend/package.json ]; then \
-#         cd frontend && npm ci --only=production; \
-#     fi
-# 
-# # Copy and build frontend if exists
-# COPY frontend/ ./frontend/
-# RUN if [ -d frontend ] && [ -f frontend/package.json ]; then \
-#         cd frontend && npm run build && \
-#         mkdir -p /app/public && \
-#         cp -r dist/* /app/public/ 2>/dev/null || \
-#         cp -r build/* /app/public/ 2>/dev/null || true; \
-#     fi
-
-# Stage 3: Main runtime image
+# Stage 2: Main runtime image
 FROM debian:bookworm-slim
 
 # Set environment variables
@@ -38,7 +18,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
     PYTHONUNBUFFERED=1
 
-# Install system dependencies and runtimes
+# Install system dependencies and add PHP repository
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    && apt-get clean
+
+# Add PHP repository (Ondrej's repo - most complete PHP packages)
+RUN curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
+
+# Install all runtimes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # System tools
     ca-certificates \
@@ -52,16 +45,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     nano \
     htop \
-    # PHP 8.3 and extensions
+    # PHP 8.3 and extensions (from sury repo)
     php8.3 \
     php8.3-fpm \
     php8.3-cli \
     php8.3-common \
     php8.3-mysql \
     php8.3-pgsql \
-    php8.3-mongodb \
-    php8.3-redis \
-    php8.3-memcached \
     php8.3-curl \
     php8.3-gd \
     php8.3-xml \
@@ -70,9 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     php8.3-bcmath \
     php8.3-intl \
     php8.3-sqlite3 \
-    php8.3-imagick \
-    php8.3-soap \
-    # Python 3
+    # Python 3 (from Debian repo)
     python3 \
     python3-pip \
     python3-venv \
@@ -83,11 +71,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20
+# Install Node.js 20 (from Nodesource)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g npm@latest \
     && apt-get clean
+
+# Install Redis and MongoDB extensions separately (they need additional repos)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    php8.3-redis \
+    php8.3-mongodb \
+    php8.3-memcached \
+    php8.3-imagick \
+    php8.3-soap \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Composer (PHP package manager)
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
@@ -111,9 +109,6 @@ RUN mkdir -p /var/log/supervisor \
 # Copy Python dependencies from builder
 COPY --from=python-builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
-
-# Copy React build if exists (COMMENTED OUT - Uncomment when you have React app)
-# COPY --from=react-builder /app/public /app/public
 
 # Copy configuration files
 COPY nginx.conf /etc/nginx/nginx.conf
