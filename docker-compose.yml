@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: multi-runtime-app
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=appdb
+      - DB_USER=appuser
+      - DB_PASSWORD=apppass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NODE_ENV=development
+    volumes:
+      - ./:/app
+      - app_tmp:/app/tmp
+      - app_logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: multi-runtime-postgres
+    environment:
+      - POSTGRES_DB=appdb
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=apppass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: multi-runtime-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6
+    container_name: multi-runtime-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=adminpass
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: multi-runtime-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@localhost.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  redis-commander:
+    image: rediscommander/redis-commander
+    container_name: multi-runtime-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - app_network
+    restart: unless-stopped
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+  app_tmp:
+  app_logs:
