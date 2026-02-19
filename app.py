@@ -1,22 +1,15 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
-import asyncio
 from datetime import datetime
-import json
+import os
 
-app = FastAPI(title="Multi-Runtime API")
+app = FastAPI(title="Python FastAPI Service")
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In-memory database
+items_db = {}
+items_counter = 0
 
 # Models
 class Item(BaseModel):
@@ -24,80 +17,82 @@ class Item(BaseModel):
     price: float
     description: Optional[str] = None
 
-class User(BaseModel):
-    username: str
-    email: str
-    full_name: Optional[str] = None
+class ItemResponse(Item):
+    id: int
+    created_at: str
 
-# In-memory storage
-items_db = {}
-users_db = {}
-
-# Routes
+# Root endpoint
 @app.get("/")
 async def root():
     return {
         "service": "Python FastAPI",
-        "version": "1.0.0",
         "status": "running",
+        "timestamp": datetime.now().isoformat(),
+        "endpoints": {
+            "GET /health": "Health check",
+            "GET /items": "List all items",
+            "POST /items": "Create new item",
+            "GET /items/{id}": "Get item by ID",
+            "PUT /items/{id}": "Update item",
+            "DELETE /items/{id}": "Delete item"
+        }
+    }
+
+# Health check
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "service": "python",
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "python"}
-
-@app.get("/items")
+# Get all items
+@app.get("/items", response_model=List[ItemResponse])
 async def get_items():
     return list(items_db.values())
 
-@app.get("/items/{item_id}")
-async def get_item(item_id: str):
-    if item_id not in items_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return items_db[item_id]
-
-@app.post("/items")
+# Create new item
+@app.post("/items", response_model=ItemResponse)
 async def create_item(item: Item):
-    item_id = str(len(items_db) + 1)
-    items_db[item_id] = item.dict()
-    return {"id": item_id, **item.dict()}
+    global items_counter
+    items_counter += 1
+    new_item = {
+        "id": items_counter,
+        "created_at": datetime.now().isoformat(),
+        **item.dict()
+    }
+    items_db[items_counter] = new_item
+    return new_item
 
-@app.put("/items/{item_id}")
-async def update_item(item_id: str, item: Item):
+# Get item by ID
+@app.get("/items/{item_id}", response_model=ItemResponse)
+async def get_item(item_id: int):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
-    items_db[item_id] = item.dict()
     return items_db[item_id]
 
+# Update item
+@app.put("/items/{item_id}", response_model=ItemResponse)
+async def update_item(item_id: int, item: Item):
+    if item_id not in items_db:
+        raise HTTPException(status_code=404, detail="Item not found")
+    updated_item = {
+        **items_db[item_id],
+        **item.dict(),
+        "updated_at": datetime.now().isoformat()
+    }
+    items_db[item_id] = updated_item
+    return updated_item
+
+# Delete item
 @app.delete("/items/{item_id}")
-async def delete_item(item_id: str):
+async def delete_item(item_id: int):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     del items_db[item_id]
-    return {"message": "Item deleted"}
-
-@app.post("/users")
-async def create_user(user: User):
-    users_db[user.username] = user.dict()
-    return user
-
-# Background task example
-@app.post("/ process/{item_id}")
-async def process_item(item_id: str, background_tasks: BackgroundTasks):
-    if item_id not in items_db:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    background_tasks.add_task(process_in_background, item_id)
-    return {"message": "Processing started"}
-
-async def process_in_background(item_id: str):
-    await asyncio.sleep(5)  # Simulate work
-    print(f"Processed item {item_id}")
-    items_db[item_id]["processed"] = True
-
-# WebSocket endpoint would be handled by Node.js
-# Python focuses on REST API
+    return {"message": "Item deleted successfully"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
