@@ -103,17 +103,18 @@ if ($request === '/') {
         </div>
         
         <div class="endpoint">
-            <strong>Python FastAPI</strong><br>
-            <code>GET /api/health</code> - Python health<br>
-            <code>GET /api/items</code> - List items<br>
-            <code>POST /api/items</code> - Create item
-        </div>
-        
-        <div class="endpoint">
-            <strong>Node.js</strong><br>
-            <code>GET /api/health</code> - Node health<br>
-            <code>WS /ws/</code> - WebSocket connection
-        </div>
+    <strong>Python FastAPI</strong><br>
+    <code>GET /py/health</code> - Python health<br>
+    <code>GET /py/items</code> - List items<br>
+    <code>POST /py/items</code> - Create item
+</div>
+
+<div class="endpoint">
+    <strong>Node.js</strong><br>
+    <code>GET /node/health</code> - Node health<br>
+    <code>GET /node/users</code> - List users<br>
+    <code>WS /ws/</code> - WebSocket connection
+</div>
         
         <div class="endpoint">
             <strong>Frontend Apps</strong><br>
