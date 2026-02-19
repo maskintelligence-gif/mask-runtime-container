@@ -17,12 +17,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // REST API routes
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'healthy', service: 'node', timestamp: new Date() });
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', service: 'node' });
 });
 
-app.get('/api/users', (req, res) => {
-    res.json({ users: [] });
+app.get('/users', (req, res) => {
+    res.json({ users: ['user1', 'user2'] });
 });
 
 app.post('/api/data', (req, res) => {
