@@ -405,7 +405,7 @@ if ($request === '/') {
             </div>
             
             <div class="footer">
-                <p>Deployed on Railway • Powered by GHCR • Multi-Runtime Container v1.0</p>
+                <p>Built by MASK INTELLIGENCE • Powered by GHCR • Multi-Runtime Container v1.0</p>
             </div>
         </div>
     </body>
