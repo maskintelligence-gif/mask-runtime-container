@@ -43,47 +43,47 @@ async def root():
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/api/health")
+@app.get("/health")
 async def health():
     return {"status": "healthy", "service": "python"}
 
-@app.get("/api/items")
+@app.get("/items")
 async def get_items():
     return list(items_db.values())
 
-@app.get("/api/items/{item_id}")
+@app.get("/items/{item_id}")
 async def get_item(item_id: str):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     return items_db[item_id]
 
-@app.post("/api/items")
+@app.post("/items")
 async def create_item(item: Item):
     item_id = str(len(items_db) + 1)
     items_db[item_id] = item.dict()
     return {"id": item_id, **item.dict()}
 
-@app.put("/api/items/{item_id}")
+@app.put("/items/{item_id}")
 async def update_item(item_id: str, item: Item):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     items_db[item_id] = item.dict()
     return items_db[item_id]
 
-@app.delete("/api/items/{item_id}")
+@app.delete("/items/{item_id}")
 async def delete_item(item_id: str):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
     del items_db[item_id]
     return {"message": "Item deleted"}
 
-@app.post("/api/users")
+@app.post("/users")
 async def create_user(user: User):
     users_db[user.username] = user.dict()
     return user
 
 # Background task example
-@app.post("/api/process/{item_id}")
+@app.post("/ process/{item_id}")
 async def process_item(item_id: str, background_tasks: BackgroundTasks):
     if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
